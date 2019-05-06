@@ -1,0 +1,93 @@
+.home {
+  padding: 50px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  img.icon {
+    width: 15%;
+    border-radius: 20px;
+    transition: .2s ease all;
+    cursor: pointer;
+  }
+
+  img.icon:hover {
+    background-color: rgba($color: #000000, $alpha: 0.03);
+    transition: .2s ease all;
+  }
+
+  img.edit {
+    max-width: 45vw;
+    max-height: 45vh;
+    box-shadow: 0 0 25px #ddd;
+  }
+
+  .line {
+    margin: 10px 0;
+
+    button:not(:last-child),
+    div:not(:last-child) {
+      margin-right: 20px;
+    }
+
+    button.selected,
+    button:disabled {
+      border-color: blue;
+      color: blue;
+      border-width: 2px;
+    }
+  }
+
+  .options {
+    min-width: 200px;
+
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border-style: solid;
+      border-color: #ccc;
+      border-width: 1px;
+      outline: none;
+      font-family: 'Josefin Slab', serif;
+    }
+
+    .btn-container {
+      margin-top: 10px;
+      float: right;
+    }
+  }
+
+  .input-inline-container {
+    input {
+      margin-right: 10px;
+    }
+  }
+
+  #histogram-container {
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    padding: 10px 0;
+  }
+}
+
+.loader {
+  border-top: 2px solid blue;
+  border-radius: 50%;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  animation: spin 2s linear infinite;
+}
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
