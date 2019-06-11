@@ -3,6 +3,8 @@ import upload from "../img/icons/upload.svg";
 import "../style/home.scss";
 import Jimp from "jimp";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import gaussian from "gaussian";
+import { Image as ImageJS } from "image-js";
 
 class Home extends Component {
   state = {
@@ -30,7 +32,8 @@ class Home extends Component {
       lowPassDef: false,
       lowPassWei: false,
       laplacian: false
-    }
+    },
+    cannyDetector: false
   };
 
   triggerFileUpload = () => {
@@ -211,6 +214,7 @@ class Home extends Component {
     c.height = img.height;
 
     let ctx = c.getContext("2d");
+
     ctx.drawImage(img, 0, 0);
 
     return ctx.getImageData(0, 0, img.width, img.height);
@@ -392,10 +396,10 @@ class Home extends Component {
   };
 
   histogram = pixels => {
-    // pixels = grayScale(pixels);
+    pixels = this.blackWhite(pixels);
 
     const { data } = pixels;
-    const histogramBW = new Array(255);
+    const histogramBW = new Array(256);
     histogramBW.fill(0);
 
     //BW
@@ -411,7 +415,10 @@ class Home extends Component {
     histogramBW.forEach(e => (totalPixels += e));
 
     histogramBW.forEach((e, index) => {
-      json.push({ name: index, nivelcinza: (e / totalPixels) * 100 });
+      json.push({
+        name: index,
+        nivelcinza: ((e / totalPixels) * 100).toFixed(1)
+      });
     });
 
     return json;
@@ -708,6 +715,30 @@ class Home extends Component {
     return outputData;
   };
 
+  calculateHistograms = function(data) {
+    var rarr = new Uint32Array(256),
+      garr = new Uint32Array(256),
+      barr = new Uint32Array(256),
+      N = 5;
+    //  in case of a very large image this could be sped up
+    //  by sample only every 2nd, 3rd or Nth pixel: i+=6, i+=10, i+=2+4*N
+    for (var i = 0; i < data.length; i += 2 + 4 * N) {
+      rarr[data[i++]]++;
+      garr[data[i++]]++;
+      barr[data[i]]++;
+    }
+    return [rarr, garr, barr];
+  };
+
+  filterMediana = () => {
+    const filterEffect = new window.MedianFilter();
+    const img = document.getElementById("img");
+    const pixels = this.getImage(img.src);
+    this.printImage(
+      filterEffect.convertImage(pixels, pixels.width, pixels.height)
+    );
+  };
+
   filterLowPassDef = () => {
     const btn = document.getElementById("lowPassDefBtn");
     const input = document.getElementById("lowPassDef-input");
@@ -804,6 +835,229 @@ class Home extends Component {
     this.printImage(this.convolution(pixels, operator));
   };
 
+  uniformNoise = () => {
+    const img = document.getElementById("img");
+    const pixels = this.getImage(img.src);
+    const { data } = pixels;
+
+    let noise,
+      random,
+      a = -30,
+      b = 30,
+      // p = 1 / (b - a),
+      mean = (a + b) / 2,
+      variance = (b - a) ** 2 / 12;
+
+    let distribution = new gaussian(mean, variance);
+
+    for (let i = 0; i < data.length; i += 4) {
+      random = Math.random();
+      noise = Math.round(distribution.ppf(random));
+
+      if (noise < a || noise > b) {
+        noise = 0;
+      }
+
+      data[i] = data[i] + noise;
+      data[i + 1] = data[i + 1] + noise;
+      data[i + 2] = data[i + 2] + noise;
+    }
+
+    this.printImage(pixels);
+
+    // for (var i = 0; i < data.length; i += 4) {
+    //   noise = a + (b - a) * Math.random();
+    // }
+  };
+
+  saltAndPepperNoise = () => {
+    const img = document.getElementById("img");
+    const pixels = this.getImage(img.src);
+    const { data } = pixels;
+
+    let min = 0,
+      max = 50,
+      noise;
+
+    for (var i = 0; i < data.length; i += 4) {
+      noise = Math.floor(Math.random() * (max - min + 1)) + min;
+
+      if (noise === min) {
+        data[i] = noise;
+        data[i + 1] = noise;
+        data[i + 2] = noise;
+      }
+
+      if (noise === max) {
+        data[i] = 255;
+        data[i + 1] = 255;
+        data[i + 2] = 255;
+      }
+    }
+
+    this.printImage(pixels);
+  };
+
+  gaussianNoise = () => {
+    const img = document.getElementById("img");
+    const pixels = this.getImage(img.src);
+    const { data } = pixels;
+
+    let noise,
+      mean = 8,
+      variance = 40,
+      distribution = gaussian(mean, variance),
+      random;
+
+    for (let i = 0; i < data.length; i += 4) {
+      random = Math.random();
+      noise = Math.round(distribution.ppf(random));
+
+      data[i] = data[i] + noise;
+      data[i + 1] = data[i + 1] + noise;
+      data[i + 2] = data[i + 2] + noise;
+    }
+
+    this.printImage(pixels);
+  };
+
+  erlangNoise = () => {
+    const img = document.getElementById("img");
+    const pixels = this.getImage(img.src);
+    const { data } = pixels;
+
+    let noise,
+      random,
+      a = 10,
+      b = 245,
+      mean = b / a,
+      variance = b / a ** 2;
+
+    let distribution = new gaussian(mean, variance);
+
+    for (let i = 0; i < data.length; i += 4) {
+      random = Math.random();
+      noise = Math.round(distribution.ppf(random));
+
+      data[i] = data[i] + noise;
+      data[i + 1] = data[i + 1] + noise;
+      data[i + 2] = data[i + 2] + noise;
+    }
+
+    this.printImage(pixels);
+  };
+
+  cannyDetector = () => {
+    const img = document.getElementById("img");
+    const canvasCanny = document.getElementById("canvasCanny");
+    const btn = document.getElementById("cannyDetector");
+    const pixels = this.getImage(img.src);
+
+    this.setState({
+      ...this.state,
+      cannyDetector: !this.state.cannyDetector
+    });
+
+    if (!this.state.cannyDetector) {
+      canvasCanny.classList.remove("hidden");
+      btn.classList.add("selected");
+
+      let c = document.createElement("canvas");
+      c.width = pixels.width;
+      c.height = pixels.height;
+      let ctx = c.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+
+      canvasCanny.width = pixels.width;
+      canvasCanny.height = pixels.height;
+      window.CannyJS.canny(c).drawOn(canvasCanny);
+    } else {
+      canvasCanny.classList.add("hidden");
+      btn.classList.remove("selected");
+    }
+  };
+
+  prewwit = type => {
+    let operator = [];
+    type === "horizontal"
+      ? (operator = [-1, -1, -1, 0, 0, 0, 1, 1, 1])
+      : (operator = [-1, 0, 1, -1, 0, 1, -1, 0, 1]);
+
+    const img = document.getElementById("img");
+    const pixels = this.getImage(img.src);
+    this.printImage(this.convolution(pixels, operator));
+  };
+
+  thresholding = threshold => {
+    const img = document.getElementById("img");
+    const pixels = this.getImage(img.src);
+    let d = pixels.data;
+    for (var i = 0; i < d.length; i += 4) {
+      var r = d[i];
+      var g = d[i + 1];
+      var b = d[i + 2];
+      var v = 0.2126 * r + 0.7152 * g + 0.0722 * b >= threshold ? 255 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    return pixels;
+  };
+
+  erode = () => {
+    const img = document.getElementById("img");
+    const structuring = document.getElementById("morphInput");
+
+    ImageJS.load(img.src).then(image => {
+      this.setState({
+        image: image
+          .grey()
+          .erode({ kernel: JSON.parse("[" + structuring.value + "]") })
+          .toDataURL(`image/${this.state.type}`)
+      });
+    });
+  };
+
+  dilate = () => {
+    const img = document.getElementById("img");
+    const structuring = document.getElementById("morphInput");
+
+    ImageJS.load(img.src).then(image => {
+      this.setState({
+        image: image
+          .grey()
+          .dilate({ kernel: JSON.parse("[" + structuring.value + "]") })
+          .toDataURL(`image/${this.state.type}`)
+      });
+    });
+  };
+
+  opening = () => {
+    const img = document.getElementById("img");
+    const structuring = document.getElementById("morphInput");
+
+    ImageJS.load(img.src).then(image => {
+      this.setState({
+        image: image
+          .grey()
+          .open({ kernel: JSON.parse("[" + structuring.value + "]") })
+          .toDataURL(`image/${this.state.type}`)
+      });
+    });
+  };
+
+  closing = () => {
+    const img = document.getElementById("img");
+    const structuring = document.getElementById("morphInput");
+
+    ImageJS.load(img.src).then(image => {
+      this.setState({
+        image: image
+          .grey()
+          .close({ kernel: JSON.parse("[" + structuring.value + "]") })
+          .toDataURL(`image/${this.state.type}`)
+      });
+    });
+  };
+
   render() {
     const {
       image,
@@ -836,7 +1090,7 @@ class Home extends Component {
           </div>
         ) : (
           <div className="flex flex-wrap justify-content-space-around max-w">
-            <div className="flex flex-column">
+            <div className="flex flex-column" style={{ maxWidth: "300px" }}>
               <img src={image} className="edit" alt="img" id="img" />
               <div className="flex line">
                 <div>
@@ -972,7 +1226,7 @@ class Home extends Component {
                       <XAxis dataKey="name" />
                       <YAxis />
                       <Tooltip />
-                      <Bar dataKey="nivelcinza" fill="#ccc" />
+                      <Bar dataKey="nivelcinza" fill="blue" />
                     </BarChart>
                   ) : null}
                   {histogramEqualizedShow ? (
@@ -986,75 +1240,193 @@ class Home extends Component {
                       <XAxis dataKey="name" />
                       <YAxis />
                       <Tooltip />
-                      <Bar dataKey="nivelcinza" fill="#ccc" />
+                      <Bar dataKey="nivelcinza" fill="blue" />
                     </BarChart>
                   ) : null}
                 </div>
-                <div className="color-models-container">
-                  <h3>Modelos de cor</h3>
-                  <div className="line flex flex-wrap">
-                    <button id="hsvBtn" onClick={this.toHSV}>
-                      HSV
-                    </button>
-                    <button id="hsiBtn" onClick={this.toHSI}>
-                      HSI
-                    </button>
-                    <button id="bwBtn" onClick={this.toBw}>
-                      P/B
-                    </button>
-                    <button
-                      id="showColorChannelsBtn"
-                      onClick={this.showColorChannel}
-                    >
-                      Exibir Canais de Cor
-                    </button>
-                  </div>
-                  <div id="colorLayers" className="flex flex-wrap hidden" />
+              </div>
+              <div className="color-models-container">
+                <h3>Modelos de cor</h3>
+                <div className="line flex flex-wrap">
+                  <button id="hsvBtn" onClick={this.toHSV}>
+                    HSV
+                  </button>
+                  <button id="hsiBtn" onClick={this.toHSI}>
+                    HSI
+                  </button>
+                  <button id="bwBtn" onClick={this.toBw}>
+                    P/B
+                  </button>
+                  <button
+                    id="showColorChannelsBtn"
+                    onClick={this.showColorChannel}
+                  >
+                    Exibir Canais de Cor
+                  </button>
                 </div>
-                <div className="color-models-container">
-                  <h3>Filtros espaciais</h3>
-                  <div className="line flex flex-wrap">
-                    <button id="medianaBtn" onClick={this.filterMediana}>
-                      Mediana
-                    </button>
-                    <button id="lowPassDefBtn" onClick={this.filterLowPassDef}>
-                      Média
-                    </button>
-                    <button id="lowPassWeiBtn" onClick={this.filterLowPassWei}>
-                      Média Ponderada
-                    </button>
-                    <button id="laplacianBtn" onClick={this.filterLaplacian}>
-                      Laplaciano
+                <div id="colorLayers" className="flex flex-wrap hidden" />
+              </div>
+              <div className="color-models-container">
+                <h3>Filtros espaciais</h3>
+                <div className="line flex flex-wrap">
+                  <button id="medianaBtn" onClick={this.filterMediana}>
+                    Mediana
+                  </button>
+                  <button id="lowPassDefBtn" onClick={this.filterLowPassDef}>
+                    Média
+                  </button>
+                  <button id="lowPassWeiBtn" onClick={this.filterLowPassWei}>
+                    Média Ponderada
+                  </button>
+                  <button id="laplacianBtn" onClick={this.filterLaplacian}>
+                    Laplaciano
+                  </button>
+                </div>
+                <div id="lowPassDef-input" className="hidden">
+                  <h4>Digite um valor</h4>
+                  <div className="input-inline-container flex">
+                    <input
+                      type="number"
+                      name="lowPassDef"
+                      id="lowPassDefInput"
+                      defaultValue="0"
+                    />
+                    <button onClick={this.handleLowPassDef}>
+                      Aplicar filtro
                     </button>
                   </div>
-                  <div id="lowPassDef-input" className="hidden">
-                    <h4>Digite um valor</h4>
+                </div>
+                <div id="lowPassWei-input" className="hidden">
+                  <h4>Digite um valor</h4>
+                  <div className="input-inline-container flex">
+                    <input
+                      type="number"
+                      name="lowPassWei"
+                      id="lowPassWeiInput"
+                      defaultValue="0"
+                    />
+                    <button onClick={this.handleLowPassWei}>
+                      Aplicar filtro
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="noise-container">
+                <h3>Ruído</h3>
+                <div className="line flex flex-wrap">
+                  <button id="uniformBtn" onClick={this.uniformNoise}>
+                    Uniforme
+                  </button>
+                  <button
+                    id="saltAndPepperBtn"
+                    onClick={this.saltAndPepperNoise}
+                  >
+                    Sal e pimenta
+                  </button>
+                  <button id="gaussianBtn" onClick={this.gaussianNoise}>
+                    Gaussiano
+                  </button>
+                  <button id="erlangBtn" onClick={this.erlangNoise}>
+                    De Erlang
+                  </button>
+                </div>
+              </div>
+              {/*
+                <div className="filters-two-container">
+                <h3>Restaurar imagem</h3>
+                <div className="line flex flex-wrap">
+                  <button id="uniformBtn" onClick={this.uniformNoise}>
+                    Filtro da média aritmética
+                  </button>
+                  <button id="uniformBtn" onClick={this.uniformNoise}>
+                    Filtro da média geométrica
+                  </button>
+                  <button id="uniformBtn" onClick={this.uniformNoise}>
+                    Filtro da média harmônica
+                  </button>
+                  <button id="uniformBtn" onClick={this.uniformNoise}>
+                    Filtro da média contra-harmônica
+                  </button>
+                  <button id="uniformBtn" onClick={this.uniformNoise}>
+                    Filtro adaptativo de redução de ruído local
+                  </button>
+                  <button id="uniformBtn" onClick={this.uniformNoise}>
+                    Filtro adaptativo de mediana
+                  </button>
+                </div>
+              </div> */}
+              <div className="morfology-container">
+                <h3>Morfologia</h3>
+                <div className="line flex flex-wrap">
+                  <button id="erodeBtn" onClick={this.erode}>
+                    Erosão
+                  </button>
+                  <button id="dilateBtn" onClick={this.dilate}>
+                    Dilatação
+                  </button>
+                  <button id="openBtn" onClick={this.opening}>
+                    Abertura
+                  </button>
+                  <button id="closeBtn" onClick={this.closing}>
+                    Fechamento
+                  </button>
+                  {/**
+                    <button id="hitOrMissBtn" onClick={this.hitOrMiss}>
+                      Hit-or-Miss
+                    </button>
+                     */}
+                  <div id="morph-input">
+                    <h4>
+                      Digite um objeto estruturante. (Formato: [x,x],[y,y])
+                    </h4>
                     <div className="input-inline-container flex">
                       <input
-                        type="number"
-                        name="lowPassDef"
-                        id="lowPassDefInput"
-                        defaultValue="0"
+                        type="string"
+                        name="morph"
+                        id="morphInput"
+                        defaultValue="[1,1,1],[1,1,1],[1,1,1]"
                       />
-                      <button onClick={this.handleLowPassDef}>
-                        Aplicar filtro
-                      </button>
                     </div>
                   </div>
-                  <div id="lowPassWei-input" className="hidden">
-                    <h4>Digite um valor</h4>
-                    <div className="input-inline-container flex">
-                      <input
-                        type="number"
-                        name="lowPassWei"
-                        id="lowPassWeiInput"
-                        defaultValue="0"
-                      />
-                      <button onClick={this.handleLowPassWei}>
-                        Aplicar filtro
-                      </button>
-                    </div>
-                  </div>
+                </div>
+              </div>
+              <div className="segmentation-container">
+                <h3>Segmentação</h3>
+                <div className="line flex flex-wrap">
+                  <button id="cannyDetector" onClick={this.cannyDetector}>
+                    Detector Canny
+                  </button>
+                  <button
+                    id="prewwitH"
+                    onClick={() => {
+                      this.prewwit("horizontal");
+                    }}
+                  >
+                    Detector Prewitt X
+                  </button>
+                  <button
+                    id="prewwitV"
+                    onClick={() => {
+                      this.prewwit("vertical");
+                    }}
+                  >
+                    Detector Prewitt Y
+                  </button>
+                  {/*<button id="cannyDetector" onClick={this.uniformNoise}>
+                    Laplaciano da Gaussiana
+                  </button> */}
+                </div>
+                <canvas id="canvasCanny" className="hidden" />
+              </div>
+              <div className="compression-container">
+                <h3>Compressão</h3>
+                <div className="line flex flex-wrap">
+                  <button id="cannyDetector" onClick={this.uniformNoise}>
+                    Codificação de Huffman
+                  </button>
+                  <button id="cannyDetector" onClick={this.uniformNoise}>
+                    Codificação LZW
+                  </button>
                 </div>
               </div>
             </div>

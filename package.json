@@ -4,6 +4,8 @@
   "private": true,
   "dependencies": {
     "axios": "^0.18.0",
+    "gaussian": "^1.1.0",
+    "image-js": "^0.21.6",
     "jimp": "^0.6.1",
     "node-sass": "^4.11.0",
     "react": "^16.8.5",
